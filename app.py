@@ -78,7 +78,7 @@ if st.session_state['current_df'] is not None:
     with st.expander("点击预览清理后的真实数据"):
         st.dataframe(df.head(5))
 
-    user_query = st.text_input("💬 请输入你想查询的问题：", placeholder="例如：我国 2024 年煤炭进口量（capacity）是多少？")
+    user_query = st.text_input("💬 请输入你想查询的问题：", placeholder="例如：中国2024年铁矿石的进口量是多少？")
 
     if st.button("开始查询") and user_query:
         if not api_key:
@@ -97,15 +97,19 @@ if st.session_state['current_df'] is not None:
                         llm, df, verbose=True, allow_dangerous_code=True, agent_type="openai-tools"
                     )
                     
+                    # 💡 核心升级：把复杂规则写进后台的 Prompt 里！
                     prompt = f"""
-                    你是一个严谨的航运数据分析师。根据用户的问题分析 dataframe。
-                    - 载重量对应 'capacity' 列，求总量时请对该列求和。
-                    - 目的国为中国，可匹配 'arrivecountryCN' 为 '中国' 或 'arrivecountry' 为 'CN'。
-                    - 时间请在 'arrivetime' 或 'updatetime' 中匹配。
+                    你是一个严谨且极其聪明的航运数据分析师。你的任务是帮用户分析 DataFrame 并给出准确的数值结果。
                     
-                    用户问题：{user_query}
+                    【🚨 你的底层强制执行规则 - 必须绝对遵守】：
+                    1. 只要涉及求总量、求和等数学计算（尤其是对 'capacity' 载重量列），**你必须先在代码里使用 `pd.to_numeric(df['对应列名'], errors='coerce')` 强制将其转换为数字类型**，并用 dropna() 清除空值后，再进行求和。绝不可以直接对文本字符串求和！
+                    2. 当需要匹配货物名称（如铁矿石、煤炭）或国家名称时，**请务必使用模糊查询**（例如：`df[df['CargoType'].str.contains('铁矿', na=False)]`），不要使用精确等于 `==`，以防止数据名称有空格或多余字符。
+                    3. 目的国为中国，可模糊搜索 'arrivecountryCN' 或 'arrivecountry' 列包含 '中国' 或 'CN'。
+                    4. 遇到任何由于数据格式导致的错误（如 TypeError, ValueError），请自行反思原因，调整代码并重试。
                     
-                    请用中文给出最终精确的计算数值结果。
+                    用户现在的提问是大白话：【{user_query}】
+                    
+                    请结合上述强制规则，写代码计算，并用中文直接给出最终精确的计算数值结果。
                     """
                     
                     response = agent.invoke(prompt)
